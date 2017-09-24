@@ -1,0 +1,11 @@
+{
+    "pascal":
+    {
+      "data_path": "/home/vietdoan/Workingspace/Enet/pascal/VOCdevkit/VOC2012/"
+    },
+  
+    "sbd":
+    {
+      "data_path": "/home/vietdoan/Workingspace/Enet/pascal/benchmark_RELEASE/"
+    }
+  }
