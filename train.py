@@ -11,6 +11,7 @@ from torch.autograd import Variable
 from torch.utils import data
 from pascal_voc_loader import PascalVOCLoader
 from enet import Enet
+from metrics import scores
 
 
 def train(args):
@@ -19,26 +20,18 @@ def train(args):
     n_classes = loader.n_classes
     trainloader = data.DataLoader(
         loader, batch_size=args.batch_size, shuffle=True)
-    # Setup visdom for visualization
-    vis = visdom.Visdom()
-    loss_window = vis.line(X=torch.zeros((1,)).cpu(),
-                           Y=torch.zeros((1)).cpu(),
-                           opts=dict(xlabel='minibaches',
-                                     ylabel='Loss',
-                                     title='Traning Loss',
-                                     legend=['Loss']))
+    another_loader = PascalVOCLoader(data_path, split='trainval', is_transform=True)
+    valloader = data.DataLoader(
+        another_loader, batch_size=args.batch_size)
     # Setup Model
     model = Enet(n_classes)
-    print model
-    test_image, test_segmap = loader[0]
-    if torch.cuda.is_available():
+    print(model)
+    if torch.cuda.is_available:
         model.cuda(0)
-        test_image = Variable(test_image.unsqueeze(0).cuda(0))
-    else:
-        test_image = Variable(test_image.unsqueeze(0))
+    criterion = nn.NLLLoss2d()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr_rate)
-    critetion = nn.NLLLoss2d()
     for epoch in xrange(args.epochs):
+        model.train()
         for i, (images, labels) in enumerate(trainloader):
             if torch.cuda.is_available():
                 images = Variable(images.cuda(0))
@@ -48,14 +41,36 @@ def train(args):
                 labels = Variable(labels)
             optimizer.zero_grad
             outputs = model(images)
-            loss = critetion(outputs, labels)
+            loss = criterion(outputs, labels)
+            loss.backward()
             optimizer.step()
-            if (i + 1) % 20 == 0:
+            if (i + 1) % 200 == 0:
                 print("Epoch [%d/%d] Loss: %.4f" %
-                      (epoch + 1, args.n_epoch, loss.data[0]))
-        torch.save(model, "{}_{}_{}_{}.pkl".format(
-            args.arch, args.dataset, args.feature_scale, epoch))
+                      (epoch + 1, args.epochs, loss.data[0]))
+        torch.save(model, "{}_{}_{}.pkl".format(
+            'enet', 'pascal', epoch))
 
+        model.eval()
+        gts, preds = [], []
+        for i, (images, labels) in enumerate(valloader):
+            if torch.cuda.is_available():
+                images = Variable(images.cuda(0))
+                labels = Variable(labels.cuda(0))
+            else:
+                images = Variable(images)
+                labels = Variable(labels)
+            outputs = model(images)
+            pred = outputs.data.max(1)[1].cpu().numpy()
+            gt = labels.data.cpu().numpy()
+            for gt_, pred_ in zip(gt, pred):
+                gts.append(gt_)
+                preds.append(pred_)
+        score, class_iou = scores(gts, preds, n_class=n_classes)
+        for k, v in score.items():
+            print k, v
+
+        for i in range(n_classes):
+            print i, class_iou[i]
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Hyperprams')

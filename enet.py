@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 
 
 class InitialBlock(nn.Module):
@@ -135,10 +136,10 @@ class BottleNeck(nn.Module):
         if self.downsampling:
             main, indices = self.pool(input)
             if (self.output_channels != self.input_channels):
-                pad = torch.Tensor(input_shape[0],
-                                   self.output_channels - self.input_channels,
-                                   input_shape[2] // 2,
-                                   input_shape[3] // 2).zero_()
+                pad = Variable(torch.Tensor(input_shape[0],
+                               self.output_channels - self.input_channels,
+                               input_shape[2] // 2,
+                               input_shape[3] // 2).zero_(), requires_grad=False)
                 if (torch.cuda.is_available):
                     pad = pad.cuda()
                 main = torch.cat((main, pad), 1)
@@ -202,6 +203,7 @@ class Enet(nn.Module):
         for layer, layer_name in zip(layers, LAYER_NAMES):
             super(Enet, self).__setattr__(layer_name, layer)
         self.layers = layers
+        self.log_softmax = nn.LogSoftmax()
 
     def forward(self, input):
         pooling_stack = []
@@ -215,5 +217,6 @@ class Enet(nn.Module):
                 pooling_stack.append(pooling_indices)
             else:
                 output = layer(output)
+        output = self.log_softmax(output)
         return output
 
