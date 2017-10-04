@@ -19,11 +19,12 @@ def get_data_path(name):
 
 
 class PascalVOCLoader(data.Dataset):
-    def __init__(self, root, split="train_aug", is_transform=False, img_size=512):
+    def __init__(self, root, split="train_aug", is_transform=False, img_size=512, label_scale=1):
         self.root = root
         self.split = split
         self.is_transform = is_transform
         self.n_classes = 21
+        self.label_scale = label_scale
         self.img_size = img_size if isinstance(
             img_size, tuple) else (img_size, img_size)
         self.mean = np.array([104.00699, 116.66877, 122.67892])
@@ -73,7 +74,7 @@ class PascalVOCLoader(data.Dataset):
         lbl[lbl == 255] = 0
         lbl = lbl.astype(float)
         lbl = m.imresize(
-            lbl, (self.img_size[0], self.img_size[1]), 'nearest', mode='F')
+            lbl, (self.img_size[0] // self.label_scale, self.img_size[1] // self.label_scale), 'nearest', mode='F')
         lbl = lbl.astype(int)
 
         img = torch.from_numpy(img).float()

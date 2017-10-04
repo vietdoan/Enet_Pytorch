@@ -85,7 +85,7 @@ class BottleNeck(nn.Module):
         input_stride = 2 if downsampling else 1
         # First projection with 1x1 kernel (2x2 for downsampling)
         conv1x1_1 = nn.Conv2d(input_channels, internal,
-                              input_stride, input_stride)
+                              input_stride, input_stride, bias=False)
         batch_norm1 = nn.BatchNorm2d(internal, 1e-3)
         prelu1 = self._prelu(internal, use_relu)
         self.block1x1_1 = nn.Sequential(conv1x1_1, batch_norm1, prelu1)
@@ -156,21 +156,21 @@ class BottleNeck(nn.Module):
             return output, indices
         return output
 
-LAYER_NAMES = ['initial', 'bottleneck_1_0', 'bottleneck_1_1',
-               'bottleneck_1_2', 'bottleneck_1_3', 'bottleneck_1_4',
-               'bottleneck_2_0', 'bottleneck_2_1', 'bottleneck_2_2',
-               'bottleneck_2_3', 'bottleneck_2_4', 'bottleneck_2_5',
-               'bottleneck_2_6', 'bottleneck_2_7', 'bottleneck_2_8',
-               'bottleneck_3_1', 'bottleneck_3_2', 'bottleneck_3_3',
-               'bottleneck_3_4', 'bottleneck_3_5', 'bottleneck_3_6',
-               'bottleneck_3_7', 'bottleneck_3_8', 'bottleneck_4_0',
-               'bottleneck_4_1', 'bottleneck_4_2', 'bottleneck_5_0',
-               'bottleneck_5_1', 'fullconv']
+ENCODER_LAYER_NAMES = ['initial', 'bottleneck_1_0', 'bottleneck_1_1',
+                       'bottleneck_1_2', 'bottleneck_1_3', 'bottleneck_1_4',
+                       'bottleneck_2_0', 'bottleneck_2_1', 'bottleneck_2_2',
+                       'bottleneck_2_3', 'bottleneck_2_4', 'bottleneck_2_5',
+                       'bottleneck_2_6', 'bottleneck_2_7', 'bottleneck_2_8',
+                       'bottleneck_3_1', 'bottleneck_3_2', 'bottleneck_3_3',
+                       'bottleneck_3_4', 'bottleneck_3_5', 'bottleneck_3_6',
+                       'bottleneck_3_7', 'bottleneck_3_8', 'classifier']
+DECODER_LAYER_NAMES = ['bottleneck_4_0', 'bottleneck_4_1', 'bottleneck_4_2'
+                       'bottleneck_5_0', 'bottleneck_5_1', 'fullconv']
 
 
-class Enet(nn.Module):
+class Encoder(nn.Module):
     def __init__(self, num_classes):
-        super(Enet, self).__init__()
+        super(Encoder, self).__init__()
         layers = []
         layers.append(InitialBlock())
         layers.append(BottleNeck(16, 64, regularlizer_prob=0.01,
@@ -189,8 +189,28 @@ class Enet(nn.Module):
             layers.append(BottleNeck(128, 128, dilated=True, dilation_rate=8))
             layers.append(BottleNeck(128, 128, asymmetric=True))
             layers.append(BottleNeck(128, 128, dilated=True, dilation_rate=16))
-        
-        # Section 4
+        # only uses for training
+        layers.append(nn.Conv2d(128, num_classes, 1))
+        for layer, layer_name in zip(layers, ENCODER_LAYER_NAMES):
+            super(Encoder, self).__setattr__(layer_name, layer)
+        self.layers = layers
+    
+    def forward(self, input):
+        pooling_stack = []
+        output = input
+        for layer in self.layers:
+            if hasattr(layer, 'downsampling') and layer.downsampling:
+                output, pooling_indices = layer(output)
+                pooling_stack.append(pooling_indices)
+            else:
+                output = layer(output)
+        return output, pooling_stack
+
+
+class Decoder(nn.Module):
+    def __init__(self, num_classes):
+        super(Decoder, self).__init__()
+        layers = []
         layers.append(BottleNeck(128, 64, upsampling=True, use_relu=True))
         layers.append(BottleNeck(64, 64, use_relu=True))
         layers.append(BottleNeck(64, 64, use_relu=True))
@@ -201,22 +221,28 @@ class Enet(nn.Module):
         layers.append(nn.ConvTranspose2d(16, num_classes, 2, stride=2))
 
         for layer, layer_name in zip(layers, LAYER_NAMES):
-            super(Enet, self).__setattr__(layer_name, layer)
+            super(Decoder, self).__setattr__(layer_name, layer)
         self.layers = layers
-        self.log_softmax = nn.LogSoftmax()
-
-    def forward(self, input):
-        pooling_stack = []
+    
+    def forward(self, input, pooling_stack):
         output = input
         for layer in self.layers:
             if hasattr(layer, 'upsampling') and layer.upsampling:
                 pooling_indices = pooling_stack.pop()
                 output = layer(output, pooling_indices)
-            elif hasattr(layer, 'downsampling') and layer.downsampling:
-                output, pooling_indices = layer(output)
-                pooling_stack.append(pooling_indices)
             else:
                 output = layer(output)
-        output = self.log_softmax(output)
+        return output
+
+
+class Enet(nn.Module):
+    def __init__(self, num_classes, encoder):
+        super(Enet, self).__init__()
+        self.encoder = encoder
+        self.decoder = Decoder(num_classes)
+
+    def forward(self, input):
+        output, pooling_stack = self.encoder(input)
+        output = self.decoder(output, pooling_stack)
         return output
 
