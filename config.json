@@ -7,5 +7,10 @@
     "sbd":
     {
       "data_path": "/home/vietdoan/Workingspace/Enet/pascal/benchmark_RELEASE/"
+    },
+
+    "camvid":
+    {
+      "data_path": "/home/vietdoan/Workingspace/Enet/camvid/"
     }
   }

@@ -141,7 +141,7 @@ class BottleNeck(nn.Module):
                                input_shape[2] // 2,
                                input_shape[3] // 2).zero_(), requires_grad=False)
                 if (torch.cuda.is_available):
-                    pad = pad.cuda()
+                    pad = pad.cuda(0)
                 main = torch.cat((main, pad), 1)
         elif self.upsampling:
             main = self.unpool(self.conv_before_unpool(input), pooling_indices)
@@ -169,7 +169,7 @@ DECODER_LAYER_NAMES = ['bottleneck_4_0', 'bottleneck_4_1', 'bottleneck_4_2'
 
 
 class Encoder(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, train=True):
         super(Encoder, self).__init__()
         layers = []
         layers.append(InitialBlock())
@@ -190,7 +190,8 @@ class Encoder(nn.Module):
             layers.append(BottleNeck(128, 128, asymmetric=True))
             layers.append(BottleNeck(128, 128, dilated=True, dilation_rate=16))
         # only uses for training
-        layers.append(nn.Conv2d(128, num_classes, 1))
+        if (train):
+            layers.append(nn.Conv2d(128, num_classes, 1))
         for layer, layer_name in zip(layers, ENCODER_LAYER_NAMES):
             super(Encoder, self).__setattr__(layer_name, layer)
         self.layers = layers
@@ -211,6 +212,7 @@ class Decoder(nn.Module):
     def __init__(self, num_classes):
         super(Decoder, self).__init__()
         layers = []
+        # Section 4
         layers.append(BottleNeck(128, 64, upsampling=True, use_relu=True))
         layers.append(BottleNeck(64, 64, use_relu=True))
         layers.append(BottleNeck(64, 64, use_relu=True))
@@ -220,9 +222,7 @@ class Decoder(nn.Module):
         layers.append(BottleNeck(16, 16, use_relu=True))
         layers.append(nn.ConvTranspose2d(16, num_classes, 2, stride=2))
 
-        for layer, layer_name in zip(layers, LAYER_NAMES):
-            super(Decoder, self).__setattr__(layer_name, layer)
-        self.layers = layers
+        self.layers = nn.ModuleList([layer for layer in layers])
     
     def forward(self, input, pooling_stack):
         output = input
@@ -236,9 +236,9 @@ class Decoder(nn.Module):
 
 
 class Enet(nn.Module):
-    def __init__(self, num_classes, encoder):
+    def __init__(self, num_classes):
         super(Enet, self).__init__()
-        self.encoder = encoder
+        self.encoder = Encoder(num_classes, train=False)
         self.decoder = Decoder(num_classes)
 
     def forward(self, input):
