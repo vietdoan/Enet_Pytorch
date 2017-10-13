@@ -39,19 +39,19 @@ def decode_segmap(temp, plot=False):
 
         label_colours = np.array([Sky, Building, Pole, Road_marking, Road, 
                                   Pavement, Tree, SignSymbol, Fence, Car, 
-                                  Pedestrian, Bicyclist])
-        r = temp.copy()
-        g = temp.copy()
-        b = temp.copy()
+                                  Pedestrian, Bicyclist]).astype(np.uint8)
+        r = np.zeros_like(temp).astype(np.uint8)
+        g = np.zeros_like(temp).astype(np.uint8)
+        b = np.zeros_like(temp).astype(np.uint8)
         for l in range(0, 12):
             r[temp == l] = label_colours[l, 0]
             g[temp == l] = label_colours[l, 1]
             b[temp == l] = label_colours[l, 2]
 
-        rgb = np.zeros((temp.shape[0], temp.shape[1], 3))
-        rgb[:, :, 0] = r
+        rgb = np.zeros((temp.shape[0], temp.shape[1], 3)).astype(np.uint8)
+        rgb[:, :, 0] = b
         rgb[:, :, 1] = g
-        rgb[:, :, 2] = b
+        rgb[:, :, 2] = r
         if plot:
             plt.imshow(rgb)
             plt.show()
@@ -82,10 +82,10 @@ def processImage(infile, args):
         pred = outputs.data.max(1)[1].cpu().numpy().reshape(360, 480)
         pred = decode_segmap(pred)
         vis = np.zeros((360, 960, 3), np.uint8)
-        vis[:360, :480, :] = frame
-        vis[:360, 480:960, :] = pred
+        vis[:360, :480, :3] = frame
+        vis[:360, 480:960, :3] = pred
         cv2.imshow('camvid', vis)
-        cv2.waitKey(33)
+        cv2.waitKey(10)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Hyperparams')

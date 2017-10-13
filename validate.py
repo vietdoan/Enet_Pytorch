@@ -67,7 +67,7 @@ def validate(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Hyperparams')
-    parser.add_argument('--model_path', nargs='?', type=str, default='enet_decoder_camvid_481.pkl', 
+    parser.add_argument('--model_path', nargs='?', type=str, default='enet_decoder_camvid_8.pkl', 
                         help='Path to the saved model')
     parser.add_argument('--dataset', nargs='?', type=str, default='camvid', 
                         help='Dataset to use [\'pascal, camvid, ade20k etc\']')

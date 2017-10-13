@@ -76,9 +76,9 @@ class CamvidLoader(data.Dataset):
         label_colours = np.array([Sky, Building, Pole, Road_marking, Road, 
                                   Pavement, Tree, SignSymbol, Fence, Car, 
                                   Pedestrian, Bicyclist])
-        r = temp.copy()
-        g = temp.copy()
-        b = temp.copy()
+        r = np.zeros_like(temp)
+        g = np.zeros_like(temp)
+        b = np.zeros_like(temp)
         for l in range(0, self.n_classes):
             r[temp == l] = label_colours[l, 0]
             g[temp == l] = label_colours[l, 1]
