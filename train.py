@@ -51,6 +51,8 @@ def train(args):
     # compute weight for cross_entropy2d
     norm_hist = hist / hist.sum()
     weight = 1 / np.log(norm_hist + 1.02)
+    # unlabeled data is not used. 
+    weight[-1] = 0
     weight = torch.FloatTensor(weight)
 
     if torch.cuda.is_available():
@@ -71,7 +73,7 @@ def train(args):
             else:
                 images = Variable(images)
                 labels = Variable(labels)
-            optimizer.zero_grad
+            optimizer.zero_grad()
             if (args.model == 'encoder'):
                 outputs, pooling_stack = model(images)
             else:
