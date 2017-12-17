@@ -1,23 +1,24 @@
 import os
+import random
 import collections
 import torch
 import torchvision
 import numpy as np
-import scipy.misc as m
 import matplotlib.pyplot as plt
-
+from PIL import Image, ImageOps
 from torch.utils import data
+from torchvision.transforms import Compose, CenterCrop, Normalize, Scale, Pad
+from torchvision.transforms import ToTensor, ToPILImage
 
 
 class CamvidLoader(data.Dataset):
-    def __init__(self, root, split="train", is_transform=False, img_size=None, label_scale=1):
+    def __init__(self, root, split="train", is_transform=False, img_size=None, augment=False):
         self.root = root
         self.split = split
-        self.img_size = [360, 480]
+        self.img_size = [480, 640]
         self.is_transform = is_transform
-        self.mean = np.array([104.00699, 116.66877, 122.67892])
+        self.augment = augment
         self.n_classes = 12
-        self.label_scale = label_scale
         self.files = collections.defaultdict(list)
 
         for split in ["train", "test", "val"]:
@@ -32,11 +33,8 @@ class CamvidLoader(data.Dataset):
         img_path = self.root + '/' + self.split + '/' + img_name
         lbl_path = self.root + '/' + self.split + 'annot/' + img_name
 
-        img = m.imread(img_path)
-        img = np.array(img, dtype=np.uint8)
-
-        lbl = m.imread(lbl_path)
-        lbl = np.array(lbl, dtype=np.int32)
+        img = Image.open(img_path).convert('RGB')
+        lbl = Image.open(lbl_path).convert('P')
 
         if self.is_transform:
             img, lbl = self.transform(img, lbl)
@@ -44,18 +42,23 @@ class CamvidLoader(data.Dataset):
         return img, lbl
 
     def transform(self, img, lbl):
-        img = img[:, :, ::-1]
-        img = img.astype(np.float64)
-        img -= self.mean
-        img = img.astype(float) / 255.0
-        # NHWC -> NCHW
-        img = img.transpose(2, 0, 1)
+        img = Scale(self.img_size, Image.BILINEAR)(img)
+        lbl = Scale(self.img_size, Image.NEAREST)(lbl)
+        if (self.augment):
+            hflip = random.random()
+            if (hflip < 0.5):
+                img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                lbl = lbl.transpose(Image.FLIP_LEFT_RIGHT)
+            transX = random.randint(-2, 2) 
+            transY = random.randint(-2, 2)
+            img = ImageOps.expand(img, border=(transX, transY, 0, 0), fill=0)
+            lbl = ImageOps.expand(lbl, border=(transX, transY, 0, 0), fill=11)
+            img = img.crop((0, 0, img.size[0]-transX, img.size[1]-transY))
+            lbl = lbl.crop((0, 0, lbl.size[0]-transX, lbl.size[1]-transY))
+        img = ToTensor()(img)
+        img = Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(img)
 
-        lbl = lbl.astype(float)
-        lbl = m.imresize(
-            lbl, (self.img_size[0] // self.label_scale, self.img_size[1] // self.label_scale), 'nearest', mode='F')
-        lbl = lbl.astype(int)
-        img = torch.from_numpy(img).float()
+        lbl = np.array(lbl)
         lbl = torch.from_numpy(lbl).long()
         return img, lbl
 
@@ -63,19 +66,19 @@ class CamvidLoader(data.Dataset):
         Sky = [128, 128, 128]
         Building = [128, 0, 0]
         Pole = [192, 192, 128]
-        Road_marking = [255, 69, 0]
-        Road = [128, 64, 128]
-        Pavement = [60, 40, 222]
-        Tree = [128, 128, 0]
-        SignSymbol = [192, 128, 128]
-        Fence = [64, 64, 128]
-        Car = [64, 0, 128]
-        Pedestrian = [64, 64, 0]
-        Bicyclist = [0, 128, 192]
+        Road = [255, 69, 0]
+        Pavement = [128, 64, 128]
+        Tree = [60, 40, 222]
+        SignSymbol = [128, 128, 0]
+        Fence = [192, 128, 128]
+        Car = [64, 64, 128]
+        Pedestrian = [64, 0, 128]
+        Bicyclist = [64, 64, 0]
+        Unlabeled = [0, 128, 192]
 
-        label_colours = np.array([Sky, Building, Pole, Road_marking, Road, 
-                                  Pavement, Tree, SignSymbol, Fence, Car, 
-                                  Pedestrian, Bicyclist])
+        label_colours = np.array([Sky, Building, Pole, Road,
+                                  Pavement, Tree, SignSymbol, Fence, Car,
+                                  Pedestrian, Bicyclist, Unlabeled])
         r = np.zeros_like(temp)
         g = np.zeros_like(temp)
         b = np.zeros_like(temp)
@@ -85,9 +88,10 @@ class CamvidLoader(data.Dataset):
             b[temp == l] = label_colours[l, 2]
 
         rgb = np.zeros((temp.shape[0], temp.shape[1], 3))
-        rgb[:, :, 0] = r
+        rgb[:, :, 0] = b
         rgb[:, :, 1] = g
-        rgb[:, :, 2] = b
+        rgb[:, :, 2] = r
+        rgb = np.array(rgb, dtype=np.uint8)
         if plot:
             plt.imshow(rgb)
             plt.show()
@@ -100,11 +104,13 @@ if __name__ == '__main__':
     trainloader = data.DataLoader(dst, batch_size=4)
     for i, data in enumerate(trainloader):
         imgs, labels = data
-        if i == 0:
+        if i == 3:
             img = torchvision.utils.make_grid(imgs).numpy()
             img = np.transpose(img, (1, 2, 0))
-            img = img[:, :, ::-1]
+            img *= np.array([0.229, 0.224, 0.225])
+            img += np.array([0.485, 0.456, 0.406])
+            img *= 255
+            img = img.astype(np.uint8)
             plt.imshow(img)
             plt.show()
-            plt.imshow(dst.decode_segmap(labels.numpy()[i]))
-            plt.show()
+            dst.decode_segmap(labels.numpy()[0], plot=True)

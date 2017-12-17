@@ -59,11 +59,11 @@ def train(args):
         model.cuda(0)
         weight = weight.cuda(0)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr_rate, weight_decay=args.w_decay)
-    scheduler = StepLR(optimizer, step_size=100, gamma=args.lr_decay)
+    scheduler = StepLR(optimizer, step_size=300, gamma=args.lr_decay)
     pooling_stack = None
-    model.train()
     for epoch in xrange(args.epochs):
         scheduler.step()
+        model.train()
         loss_list = []
         file = open('../another_' + args.model + '/{}_{}.txt'.format('enet', epoch), 'w')
         for i, (images, labels) in enumerate(trainloader):
@@ -94,7 +94,10 @@ def train(args):
             else:
                 images = Variable(images)
                 labels = Variable(labels)
-            outputs = model(images)
+            if (args.model == 'encoder'):
+                outputs, pooling_stack = model(images)
+            else:
+                outputs = model(images)
             pred = outputs.data.max(1)[1].cpu().numpy()
             gt = labels.data.cpu().numpy()
             for gt_, pred_ in zip(gt, pred):
